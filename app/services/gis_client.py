@@ -1,13 +1,15 @@
 # app/services/gis_client.py
 
-import httpx
 from pydantic import BaseModel
+import httpx
 
 class TerrainAttributes(BaseModel):
     elevation: float | None = None
     slope_deg: float | None = None
 
-GIS_API_BASE = "http://146.190.136.189:8000"  # your DigitalOcean GIS API
+
+GIS_API_BASE = "http://146.190.136.189:8000"  # DigitalOcean GIS API base URL
+
 
 def fetch_terrain(lat: float, lon: float) -> TerrainAttributes:
     """
@@ -20,32 +22,27 @@ def fetch_terrain(lat: float, lon: float) -> TerrainAttributes:
 
     try:
         resp = httpx.get(url, params=params, timeout=8.0)
+        # TEMP: debug logging so we can see what's happening in Render logs
+        print("GIS API response:", resp.status_code, resp.text[:200])
         resp.raise_for_status()
         data = resp.json()
-
-        print("[GIS DEBUG] terrain response:", data)
-
-        # Try explicit keys first
-        elev = (
-            data.get("elevation_raw")
-            or data.get("elevation")
-            or data.get("elev")
-        )
-
-        # Fallback: any numeric field with 'elev' in the name
-        if elev is None:
-            for k, v in data.items():
-                if "elev" in k.lower():
-                    if isinstance(v, (int, float)):
-                        elev = float(v)
-                        break
-
-        return TerrainAttributes(
-            elevation=elev,
-            slope_deg=data.get("slope_deg"),
-        )
-
     except Exception as e:
-        print(f"[GIS ERROR] {e!r}")
-        # If the GIS service is down or times out, don't break the app
+        # TEMP: log the error in Render logs
+        print(f"GIS fetch failed: {e}")
         return TerrainAttributes()
+
+    elev = (
+        data.get("elevation_raw")
+        or data.get("elevation")
+        or data.get("elev")
+    )
+    slope = (
+        data.get("slope_deg")
+        or data.get("slope")
+        or data.get("slope_raw")
+    )
+
+    return TerrainAttributes(
+        elevation=elev,
+        slope_deg=slope,
+    )
