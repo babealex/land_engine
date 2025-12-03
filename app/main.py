@@ -8,6 +8,9 @@ from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from .services.gis_client import fetch_terrain
+
+
 # Program models
 from .programs.models_eqip import EqipQuoteResponse
 from .programs.models_crp import CrpQuoteResponse
@@ -113,6 +116,11 @@ class ParcelOut(ParcelBase):
     las_score: float
     expected_year1_payout: float
     raw_yield_percent: float
+
+    # Remote GIS (DigitalOcean) extras – not stored in DB
+    gis_elevation: Optional[float] = None
+    gis_slope: Optional[float] = None
+
 
 
 class CountyStats(BaseModel):
@@ -336,7 +344,16 @@ def create_single(parcel: ParcelCreate):
         new_id = cur.lastrowid
 
     row = conn.execute("SELECT * FROM parcels WHERE id = ?", (new_id,)).fetchone()
-    return row_to_parcel(row)
+    parcel_out = row_to_parcel(row)
+
+    # 4) Remote GIS (DigitalOcean) – attach elevation & slope to response only
+    if parcel.lat is not None and parcel.lon is not None:
+        terrain = fetch_terrain(lat=parcel.lat, lon=parcel.lon)
+        parcel_out.gis_elevation = terrain.elevation
+        parcel_out.gis_slope = terrain.slope_deg
+
+    return parcel_out
+
 
 
 # =======================================================
