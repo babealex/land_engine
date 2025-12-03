@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 import httpx
 
+
 class TerrainAttributes(BaseModel):
     elevation: float | None = None
     slope_deg: float | None = None
@@ -22,25 +23,43 @@ def fetch_terrain(lat: float, lon: float) -> TerrainAttributes:
 
     try:
         resp = httpx.get(url, params=params, timeout=8.0)
-        # TEMP: debug logging so we can see what's happening in Render logs
-        print("GIS API response:", resp.status_code, resp.text[:200])
         resp.raise_for_status()
         data = resp.json()
+
+        # Debugging – you can keep or remove later
+        print("DEBUG Terrain JSON keys:", list(data.keys()))
+        print("DEBUG Terrain JSON sample:", {
+            k: data.get(k) for k in list(data.keys())[:6]
+        })
     except Exception as e:
-        # TEMP: log the error in Render logs
         print(f"GIS fetch failed: {e}")
         return TerrainAttributes()
 
-    elev = (
-        data.get("elevation_raw")
-        or data.get("elevation")
-        or data.get("elev")
-    )
-    slope = (
-        data.get("slope_deg")
-        or data.get("slope")
-        or data.get("slope_raw")
-    )
+    # Elevation: now includes elevation_m
+    elev = None
+    for key in (
+        "elevation_m",
+        "elevation_raw",
+        "elevation",
+        "elev",
+        "elev_m",
+        "z",
+    ):
+        if key in data and data[key] is not None:
+            elev = data[key]
+            break
+
+    # Slope: slope_deg is already what your API returns
+    slope = None
+    for key in (
+        "slope_deg",
+        "slope",
+        "slope_raw",
+        "slope_degrees",
+    ):
+        if key in data and data[key] is not None:
+            slope = data[key]
+            break
 
     return TerrainAttributes(
         elevation=elev,
